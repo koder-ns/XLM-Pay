@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Horizon } from '@stellar/stellar-sdk';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'crypto';
 import { EventStorageService } from './event-storage.service';
 import { WebhookDeliveryService } from './webhook-delivery.service';
 import { StellarEvent } from '../entities/stellar-event.entity';

@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { ApiToken } from '../entities/api-token.entity';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'crypto';
 
 @Injectable()
 export class ApiTokenService {

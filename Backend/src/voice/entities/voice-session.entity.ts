@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'crypto';
 import { ConversationState } from '../types/conversation-state.enum';
 import { FeatureContext } from '../types/feature-context.enum';
 
