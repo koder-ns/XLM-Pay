@@ -1,66 +1,72 @@
-import {
-  Injectable,
-  CanActivate,
-  ExecutionContext,
-  HttpException,
-  HttpStatus,
-} from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, HttpException, HttpStatus } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { RateLimitService } from '../services/rate-limit.service';
 
-export const RATE_LIMIT_KEY = 'rateLimit';
-export const RateLimit = (limit: number, ttlSeconds: number) =>
-  Reflect.metadata(RATE_LIMIT_KEY, { limit, ttlSeconds });
+export const RATE_LIMIT_KEY = 'rate_limit';
 
-interface RateLimitEntry {
-  count: number;
-  resetAt: number;
+export interface RateLimitOptions {
+  limit: number;
+  windowSeconds: number;
+  keyPrefix?: string;
 }
+
+export const RateLimit = (options: RateLimitOptions) => {
+  return (target: any, propertyKey?: string, descriptor?: PropertyDescriptor) => {
+    if (propertyKey && descriptor) {
+      Reflect.defineMetadata(RATE_LIMIT_KEY, options, descriptor.value);
+      return descriptor;
+    }
+    Reflect.defineMetadata(RATE_LIMIT_KEY, options, target);
+    return target;
+  };
+};
 
 @Injectable()
 export class RateLimitGuard implements CanActivate {
-  private readonly store = new Map<string, RateLimitEntry>();
+  constructor(
+    private readonly rateLimitService: RateLimitService,
+    private readonly reflector: Reflector,
+  ) {}
 
-  // Default: 100 req / 60s per user+IP
-  private readonly defaultLimit = 100;
-  private readonly defaultTtl = 60_000;
-
-  constructor(private readonly reflector: Reflector) {}
-
-  canActivate(context: ExecutionContext): boolean {
-    const meta = this.reflector.getAllAndOverride<{ limit: number; ttlSeconds: number }>(
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const options = this.reflector.get<RateLimitOptions>(
       RATE_LIMIT_KEY,
-      [context.getHandler(), context.getClass()],
+      context.getHandler(),
     );
 
-    const limit = meta?.limit ?? this.defaultLimit;
-    const ttl = (meta?.ttlSeconds ?? 60) * 1000;
-
-    const req = context.switchToHttp().getRequest();
-    const res = context.switchToHttp().getResponse();
-    const ip = req.ip ?? req.connection?.remoteAddress ?? 'unknown';
-    const userId = req.user?.id ?? 'anon';
-    const key = `${userId}:${ip}:${req.route?.path ?? req.path}`;
-
-    const now = Date.now();
-    let entry = this.store.get(key);
-
-    if (!entry || now > entry.resetAt) {
-      entry = { count: 0, resetAt: now + ttl };
-      this.store.set(key, entry);
+    if (!options) {
+      return true; // No rate limit configured
     }
 
-    entry.count++;
-    const remaining = Math.max(0, limit - entry.count);
-    const resetSec = Math.ceil((entry.resetAt - now) / 1000);
+    const request = context.switchToHttp().getRequest();
+    const response = context.switchToHttp().getResponse();
 
-    res.setHeader('X-RateLimit-Limit', limit);
-    res.setHeader('X-RateLimit-Remaining', remaining);
-    res.setHeader('X-RateLimit-Reset', resetSec);
+    // Get client IP
+    const ip = request.ip || request.connection.remoteAddress;
 
-    if (entry.count > limit) {
-      res.setHeader('Retry-After', resetSec);
+    // Generate rate limit key
+    const keyPrefix = options.keyPrefix || context.getHandler().name;
+    const key = this.rateLimitService.generateKeyForIp(ip, keyPrefix);
+
+    // Check rate limit
+    const result = await this.rateLimitService.checkRateLimit(
+      key,
+      options.limit,
+      options.windowSeconds,
+    );
+
+    // Set rate limit headers
+    response.setHeader('X-RateLimit-Limit', options.limit);
+    response.setHeader('X-RateLimit-Remaining', result.remaining);
+    response.setHeader('X-RateLimit-Reset', result.resetAt.toISOString());
+
+    if (!result.allowed) {
       throw new HttpException(
-        { message: 'Too Many Requests', retryAfter: resetSec },
+        {
+          statusCode: HttpStatus.TOO_MANY_REQUESTS,
+          message: 'Too many requests',
+          retryAfter: result.resetAt,
+        },
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }

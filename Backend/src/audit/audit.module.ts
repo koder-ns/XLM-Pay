@@ -1,13 +1,13 @@
 import { Module } from '@nestjs/common';
-import { ScheduleModule } from '@nestjs/schedule';
-import { AuditLogService } from './audit-log.service';
-import { AuditLogController } from './audit-log.controller';
-import { AuditLogInterceptor } from './audit-log.interceptor';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { AuditService } from './audit.service';
+import { AuditController } from './audit.controller';
+import { AuditLog } from './audit.entity';
 
 @Module({
-  imports: [ScheduleModule.forRoot()],
-  controllers: [AuditLogController],
-  providers: [AuditLogService, AuditLogInterceptor],
-  exports: [AuditLogService, AuditLogInterceptor],
+  imports: [TypeOrmModule.forFeature([AuditLog])],
+  providers: [AuditService],
+  controllers: [AuditController],
+  exports: [AuditService],
 })
 export class AuditModule {}

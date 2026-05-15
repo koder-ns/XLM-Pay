@@ -1,90 +1,41 @@
 import { NestFactory } from '@nestjs/core';
-import { ConfigService } from '@nestjs/config';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import * as yaml from 'js-yaml';
 import { AppModule } from './app.module';
-import { ComprehensiveValidationPipe } from './common/pipes/comprehensive-validation.pipe';
-import { buildCorsConfig } from './security-headers/cors.config';
-import { PrismaService } from './prisma.service';
-import { AppLogger } from './common/logger/app.logger';
-import { RequestLoggingInterceptor } from './common/interceptors/request-logging.interceptor';
+import { RedisIoAdapter } from './websocket/redis-io.adapter';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { ValidationPipe } from '@nestjs/common';
+import { ThrottleGuard } from './throttle/throttle.guard';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
-  const logger = app.get(AppLogger);
-  app.useLogger(logger);
-  const configService = app.get(ConfigService);
+  const app = await NestFactory.create(AppModule);
 
-  // Global comprehensive validation pipe with injection protection
+  // Enable validation globally
   app.useGlobalPipes(
-    new ComprehensiveValidationPipe({
-      scanSqlInjection: true,
-      scanXss: true,
-      autoSanitizeXss: false,
+    new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
     }),
   );
 
-  // Global logging interceptor
-  app.useGlobalInterceptors(new RequestLoggingInterceptor(logger));
-
-  // API prefix and version normalization
-  const rawPrefix = configService.get<string>('API_PREFIX', 'api');
-  const apiPrefix = rawPrefix.replace(/\/?v[0-9]+$/, '').replace(/^\/|\/$/g, '') || 'api';
-  app.setGlobalPrefix(apiPrefix);
-
-  // OpenAPI / Swagger
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('Stellara Backend API')
-    .setDescription('REST API documentation for Stellara backend services')
-    .setVersion('1.0.0')
-    .addBearerAuth(
-      {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        description: 'Provide JWT access token',
-      },
-      'bearer',
-    )
+  // Configure Swagger
+  const config = new DocumentBuilder()
+    .setTitle('Stellara API')
+    .setDescription('API for authentication, monitoring Stellar network events, and delivering webhooks')
+    .setVersion('1.0')
+    .addTag('Authentication')
+    .addTag('Stellar Monitor')
+    .addBearerAuth()
     .build();
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api/docs', app, document);
 
-  const document = SwaggerModule.createDocument(app, swaggerConfig, {
-    deepScanRoutes: true,
-  });
+  const redisIoAdapter = new RedisIoAdapter(app);
+  await redisIoAdapter.connectToRedis();
 
-  SwaggerModule.setup('api/docs', app, document, {
-    swaggerOptions: {
-      persistAuthorization: true,
-    },
-    jsonDocumentUrl: '/api/docs-json',
-  });
+  app.useWebSocketAdapter(redisIoAdapter);
+  app.useGlobalGuards(app.get(ThrottleGuard));
 
-  const httpServer = app.getHttpAdapter().getInstance();
-  httpServer.get('/api/docs-yaml', (_req, res) => {
-    res.type('application/x-yaml');
-    res.send(yaml.dump(document));
-  });
 
-  // Hardened CORS configuration
-  app.enableCors(buildCorsConfig(configService));
-
-  // Database connection validation
-  const prismaService = app.get(PrismaService);
-  try {
-    await prismaService.$connect();
-    console.log('Database connection established successfully');
-  } catch (error) {
-    console.error('Failed to connect to database:', error.message);
-    process.exit(1);
-  }
-
-  const port = configService.get<number>('PORT', 3000);
-  await app.listen(port);
-
-  console.log(`Application is running on: http://localhost:${port}/${apiPrefix}`);
+  await app.listen(process.env.PORT ?? 3000);
 }
-
 bootstrap();

@@ -1,115 +1,92 @@
-import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
-import { ScheduleModule } from '@nestjs/schedule';
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
+
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { validateEnv } from './config/env.validation';
 
-// Core & Infrastructure Modules
-import { ReputationModule } from './reputation/reputation.module';
-import { DatabaseModule } from './database.module';
-import { HealthModule } from './health/health.module';
-import { IndexerModule } from './indexer/indexer.module';
-import { NotificationModule } from './notification/notification.module';
-import { StorageModule } from './storage/storage.module';
-import { AppCacheModule } from './cache/cache.module';
-import { PrismaModule } from './prisma.module';
-// Feature Modules
-import { InsuranceModule } from '../insurance/insurance.module';
-import { RegenerativeFinanceModule } from './regenerative-finance/regenerative-finance.module';
-import { CompetitionModule } from './competition/competition.module';
-import { SupportModule } from './support/support.module';
-import { MultisigModule } from './multisig/multisig.module';
-import { NonceModule } from './nonce/nonce.module';
-import { V1Module } from './modules/v1/v1.module';
-import { V2Module } from './modules/v2/v2.module';
-import { MfaModule } from './mfa/mfa.module';
-// Reliability & Observability Modules (#680, #681, #682, #683)
-import { CircuitBreakerModule } from './circuit-breaker/circuit-breaker.module';
-import { TracingModule } from './tracing/tracing.module';
-import { DeadLetterQueueModule } from './dead-letter-queue/dead-letter-queue.module';
-import { IdempotencyModule } from './idempotency/idempotency.module';
-import { BulkModule } from './bulk/bulk.module';
-import { FeatureFlagsModule } from './feature-flags/feature-flags.module';
-import { StellaraGraphQLModule } from './graphql/graphql.module';
+import { RedisModule } from './redis/redis.module';
+import { VoiceModule } from './voice/voice.module';
+// DatabaseModule removed - using PostgreSQL config in this module instead
+import { StellarMonitorModule } from './stellar-monitor/stellar-monitor.module';
+import { WorkflowModule } from './workflow/workflow.module';
+import { QueueModule } from './queue/queue.module';
 import { AuthModule } from './auth/auth.module';
-import { AnalyticsModule } from './analytics/analytics.module';
-import { AuditModule } from './audit/audit.module';
-import { ValidationModule } from './common/validation.module';
-import { SecurityHeadersModule } from './security-headers/security-headers.module';
+import { MarketDataModule } from './market-data/market-data.module';
 
-// Middleware & Common
-import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
-import { LoggingMiddleware } from './common/middleware/logging.middleware';
-import { ApiVersionMiddleware } from './common/middleware/api-version.middleware';
-import { TimeoutMiddleware } from './common/middleware/timeout.middleware';
-import { SanitizationMiddleware } from './common/middleware/sanitization.middleware';
-import { IdempotencyMiddleware } from './idempotency/idempotency.middleware';
-import { AppLogger } from './common/logger/app.logger';
+import { RolesGuard } from './guards/roles.guard';
+
+import { Workflow } from './workflow/entities/workflow.entity';
+import { WorkflowStep } from './workflow/entities/workflow-step.entity';
+import { User } from './auth/entities/user.entity';
+import { WalletBinding } from './auth/entities/wallet-binding.entity';
+import { LoginNonce } from './auth/entities/login-nonce.entity';
+import { RefreshToken } from './auth/entities/refresh-token.entity';
+import { ApiToken } from './auth/entities/api-token.entity';
+import { AuditModule } from './audit/audit.module';
+import { AuditLog } from './audit/audit.entity';
+import { VoiceJob } from './voice/entities/voice-job.entity';
+import { ThrottleModule } from './throttle/throttle.module';
 
 
 @Module({
   imports: [
-    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
-      validate: validateEnv,
     }),
-    ThrottlerModule.forRootAsync({
+
+    TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        throttlers: [
-          {
-            ttl: 60000,
-            limit: 100,
-          },
+      useFactory: (configService: ConfigService) => ({
+        type: 'postgres',
+        host: configService.get('DB_HOST') || 'localhost',
+        port: configService.get('DB_PORT') || 5432,
+        username: configService.get('DB_USERNAME') || 'postgres',
+        password: configService.get('DB_PASSWORD') || 'password',
+        database:
+          configService.get('DB_DATABASE') || 'stellara_workflows',
+        entities: [
+          Workflow,
+          WorkflowStep,
+          User,
+          WalletBinding,
+          LoginNonce,
+          RefreshToken,
+          ApiToken,
+          AuditLog,
+          VoiceJob,
         ],
+        synchronize: configService.get('NODE_ENV') === 'development',
+        logging: configService.get('NODE_ENV') === 'development',
       }),
     }),
-    PrismaModule,
-    ReputationModule,
-    DatabaseModule,
-    HealthModule,
-    IndexerModule,
-    NotificationModule,
-    StorageModule,
-    InsuranceModule,
-    RegenerativeFinanceModule,
-    CompetitionModule,
-    SupportModule,
-    MultisigModule,
-    AppCacheModule,
-    // Reliability & Observability
-    CircuitBreakerModule,
-    TracingModule,
-    DeadLetterQueueModule,
-    IdempotencyModule,
-    BulkModule,
-    FeatureFlagsModule,
-    StellaraGraphQLModule,
-    MfaModule,
-    AnalyticsModule,
+
+    RedisModule,
+    AuthModule,
+    VoiceModule,
+    StellarMonitorModule,
+    WorkflowModule,
+    QueueModule,
+    MarketDataModule,
     AuditModule,
-    ValidationModule,
-    SecurityHeadersModule,
+    ThrottleModule,
   ],
+
   controllers: [AppController],
-  providers: [AppService, AppLogger, ApiVersionMiddleware, TimeoutMiddleware],
+
+  providers: [
+    AppService,
+
+    /**
+     * Global RBAC enforcement
+     * Applies @Roles() checks across all controllers
+     */
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
+    },
+  ],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer): void {
-    consumer
-      .apply(
-        CorrelationIdMiddleware,
-        LoggingMiddleware,
-        ApiVersionMiddleware,
-        TimeoutMiddleware,
-        SanitizationMiddleware,
-        IdempotencyMiddleware,
-      )
-      .forRoutes('*');
-  }
-}
+export class AppModule {}
