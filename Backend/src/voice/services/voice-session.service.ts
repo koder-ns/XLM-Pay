@@ -1,11 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { RedisService } from '../../redis/redis.service';
 import { ConversationStateMachineService } from './conversation-state-machine.service';
-import {
-  VoiceSession,
-  VoiceMessage,
-  VoiceSessionFactory,
-} from '../entities/voice-session.entity';
+import { VoiceSession, VoiceMessage } from '../entities/voice-session.entity';
 import { ConversationState } from '../types/conversation-state.enum';
 import { randomUUID as uuidv4 } from 'crypto';
 
@@ -31,7 +27,7 @@ export class VoiceSessionService implements OnModuleInit {
     walletAddress?: string,
     metadata?: Record<string, any>,
   ): Promise<VoiceSession> {
-    const session = VoiceSessionFactory.create(
+    const session = VoiceSession.create(
       userId,
       context,
       walletAddress,
@@ -195,7 +191,7 @@ export class VoiceSessionService implements OnModuleInit {
 
         const session = JSON.parse(sessionData);
         const lastActivity = new Date(session.lastActivityAt).getTime();
-        const ttl = session.ttl * 1000; // Convert to milliseconds
+        const ttl = session.ttl * 1000;
 
         if (now - lastActivity > ttl) {
           const sessionId = key.replace(this.SESSION_PREFIX, '');
