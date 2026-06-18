@@ -129,7 +129,7 @@ fn test_academy_rewards_trigger_social_rewards() {
         &user,
         &Symbol::new(&env, "badge"),
         &(discount as i128),
-    ).unwrap();
+    );
 
     let record = academy.get_redemption_history(&user, &0u32).unwrap();
     assert_eq!(record.discount_applied, 500);
