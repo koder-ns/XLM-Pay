@@ -65,7 +65,7 @@ export class WorkflowExecutionService {
     // Check for existing workflow with same idempotency key
     const existingWorkflow = await this.workflowRepository.findOne({
       where: { idempotencyKey },
-      relations: ['steps'],
+      relations: { steps: true },
     });
 
     if (existingWorkflow) {
@@ -340,7 +340,7 @@ export class WorkflowExecutionService {
   async retryWorkflow(workflowId: string): Promise<void> {
     const workflow = await this.workflowRepository.findOne({
       where: { id: workflowId },
-      relations: ['steps'],
+      relations: { steps: true },
     });
 
     if (!workflow) {
