@@ -217,8 +217,8 @@ impl StakingRewardsContract {
         }
 
         // Pay out any pending rewards before removing stake
-        let pending_rewards = calculate_rewards(&env, &user_stake).unwrap_or(0);
-        if pending_rewards > 0 {
+        let reward_amount = calculate_rewards(&env, &user_stake).unwrap_or(0);
+        if reward_amount > 0 {
             let reward_token: Address = env
                 .storage()
                 .instance()
@@ -227,7 +227,7 @@ impl StakingRewardsContract {
             soroban_sdk::token::Client::new(&env, &reward_token).transfer(
                 &env.current_contract_address(),
                 &user,
-                &pending_rewards,
+                &reward_amount,
             );
         }
 
@@ -243,12 +243,20 @@ impl StakingRewardsContract {
             &principal_to_return,
         );
 
+        // Emit the claim event once using the already-transferred reward amount.
+        if reward_amount > 0 {
+            env.events().publish(
+                (symbol_short!("claim"), user.clone()),
+                (reward_amount, env.ledger().timestamp()),
+            );
+        }
+
         // Remove stake
         env.storage().persistent().remove(&key);
 
         env.events().publish(
             (symbol_short!("unstake"), user),
-            (principal_to_return, pending_rewards, env.ledger().timestamp()),
+            (principal_to_return, reward_amount, env.ledger().timestamp()),
         );
 
         Ok(principal_to_return)
