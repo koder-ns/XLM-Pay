@@ -17,6 +17,7 @@ import { MarketDataModule } from './market-data/market-data.module';
 import { AiModule } from './ai/ai.module';
 
 import { RolesGuard } from './guards/roles.guard';
+import { ConfigValidationService } from './config/config-validation.service';
 
 import { Workflow } from './workflow/entities/workflow.entity';
 import { WorkflowStep } from './workflow/entities/workflow-step.entity';
@@ -47,7 +48,7 @@ import { HealthModule } from './health/health.module';
         host: configService.get('DB_HOST') || 'localhost',
         port: configService.get('DB_PORT') || 5432,
         username: configService.get('DB_USERNAME') || 'postgres',
-        password: configService.get('DB_PASSWORD') || 'password',
+        password: configService.get('DB_PASSWORD'),
         database: configService.get('DB_DATABASE') || 'stellara_workflows',
         entities: [
           Workflow,
@@ -82,6 +83,12 @@ import { HealthModule } from './health/health.module';
 
   providers: [
     AppService,
+    ConfigValidationService,
+
+    /**
+     * Global RBAC enforcement
+     * Applies @Roles() checks across all controllers
+     */
     {
       provide: APP_GUARD,
       useClass: RolesGuard,
