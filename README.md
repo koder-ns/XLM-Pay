@@ -1,253 +1,352 @@
-📜 Stellara AI Smart Contracts (Soroban)
+# XLMPay 💫
 
-Soroban smart contracts powering Stellara AI, a Web3 crypto learning and social trading platform built on the Stellar blockchain. These contracts provide decentralized services for education credentials, social rewards, messaging, and on-chain trading used by the Stellara backend and frontend applications.
+### Non-Custodial Recurring & Pull Payments on Stellar
 
-This repository is intended for blockchain developers, protocol contributors, and the Stellara platform infrastructure, serving as the trust layer for learning achievements, engagement rewards, user interactions, and decentralized trading features.
+Soroban Smart Contracts • Recurring Payments • Subscriptions • Payroll Streaming • Non-Custodial Infrastructure
 
-🆕 Upgradeability & Governance
-NEW: All contracts now feature explicit upgradeability with on-chain governance support.
+XLMPay is an open-source protocol for **recurring and pull-based payments** on the **Stellar** network, built on **Soroban** smart contracts.
 
-✅ Multi-Signature Approval: Upgrades require M-of-N approvals (e.g., 2-of-3)
-✅ Timelock Delays: Prevents immediate execution (configurable: 1-24+ hours)
-✅ Role-Based Control: Admin, Approver, and Executor roles prevent single points of failure
-✅ Transparent Governance: All proposals tracked on-chain and auditable
-✅ Comprehensive Tests: 10+ test cases covering all upgrade scenarios
+It lets a payer authorize a recipient to pull funds on a schedule — a subscription, a salary, rent, an installment plan — **without** giving up custody of their funds and **without** having to manually sign a transaction every single payment cycle.
 
-Documentation:
+---
 
-Upgradeability Design - Complete architecture & security analysis
-Governance User Guide - Step-by-step upgrade procedures
-Quick Reference - 30-second overview
-Implementation Summary - What was built
-Overview
-This repository contains four core smart contracts that power the Stellara ecosystem:
+# 🚀 The Problem
 
-Trading Contract (✨ Now Upgradeable): Decentralized exchange functionality for trading cryptocurrency pairs
-Academy Contract: Credential management for course completion and learning achievements
-Social Rewards Contract: Engagement tracking and reward distribution for community participation
-Messaging Contract: Decentralized messaging between users with read status tracking
-Project Structure
-├── contracts/
-│   ├── trading/         # ✨ Upgradeable DEX trading contract
-│   ├── academy/         # ✨ NEW: Academy vesting & rewards contract
-│   │   ├── VESTING_DESIGN.md           # Vesting architecture & design
-│   │   ├── VESTING_QUICK_REFERENCE.md  # Quick reference guide
-│   │   ├── INTEGRATION_GUIDE.md        # Backend/frontend integration
-│   │   ├── DELIVERY_SUMMARY.md         # Project completion summary
-│   │   └── README.md                   # Academy contract overview
-│   ├── social_rewards/  # Engagement rewards contract
-│   └── messaging/       # P2P messaging contract
-├── shared/              # ✨ NEW: Shared governance module (reusable)
-│   └── src/governance.rs # Multi-sig upgrade governance
-├── Cargo.toml          # Workspace configuration
-├── UPGRADEABILITY.md   # Upgradeability design documentation
-├── GOVERNANCE_GUIDE.md # Step-by-step governance procedures
-├── QUICK_REFERENCE.md  # Quick reference card
-└── README.md           # This file
+Sending a one-time crypto payment is easy: you sign a transaction, it settles, done.
 
-Prerequisites
-Rust 1.70 or later
-Soroban SDK 20.5.0
-Stellar CLI tools
-Building
-# Build all contracts
-cargo build --release --target wasm32-unknown-unknown
+**Recurring** payments are not. On most blockchains, including Stellar today, there is no native way for a merchant or employer to "charge" a wallet the way a credit card network can auto-charge a card. This leaves people with two bad options:
 
-# Build specific contract
-cd contracts/trading
-cargo build --release --target wasm32-unknown-unknown
-Testing
-# Run all tests (including new governance tests)
-cargo test --all
+1. **Manually sign every single payment, every cycle.** Works in theory, fails in practice — people forget, get busy, or simply stop. This is a major reason on-chain subscriptions and recurring payroll barely exist today.
+2. **Hand custody of funds to a third party** who pays on your behalf automatically. This defeats the entire point of holding your own wallet — you're back to trusting a middleman with your money.
 
-# Run specific contract tests
-cd contracts/trading
-cargo test  # Includes 10+ upgradeability tests
-Governance & Upgradeability
-Quick Start
-All contracts now support governance-controlled upgrades:
-# 1. Initialize with governance roles
-stellar contract invoke --id $CONTRACT_ID --source admin -- \
-  init --admin $ADMIN --approvers [$A1,$A2,$A3] --executor $EXECUTOR
+There is currently no good middle option: a way to pre-authorize a *bounded, revocable, automatic* pull of funds while keeping full self-custody.
 
-# 2. Propose an upgrade
-stellar contract invoke --id $CONTRACT_ID --source admin -- \
-  propose_upgrade --new_contract_hash $HASH --description "..." \
-  --approvers [$A1,$A2,$A3] --approval_threshold 2 --timelock_delay 3600
+---
 
-# 3. Approvers vote (need 2 of 3)
-stellar contract invoke --id $CONTRACT_ID --source $APPROVER1 -- \
-  approve_upgrade --proposal_id 1
+# ⚡ What XLMPay Does
 
-# 4. Wait for timelock, then execute
-stellar contract invoke --id $CONTRACT_ID --source $EXECUTOR -- \
-  execute_upgrade --proposal_id 1
-Governance Features
-✅ Multi-Sig Approval (M-of-N): e.g., 2-of-3 signers required
-✅ Timelock Delays: Safety period (1-24+ hours) before execution
-✅ Role-Based Control: Admin, Approver, Executor roles
-✅ Transparent: All proposals on-chain and queryable
-✅ Circuit Breakers: Rejection and cancellation mechanisms
+XLMPay introduces a third option: a smart-contract-enforced **payment authorization** that sits between the payer and the recipient.
 
-Documentation
-UPGRADEABILITY.md: 10+ sections covering:
+1. **The payer signs one authorization**, not a payment every cycle. That authorization defines hard limits:
+   - maximum amount per pull
+   - minimum interval between pulls (e.g., no more than once every 30 days)
+   - an expiry date or maximum number of pulls
+   - which asset (XLM, USDC, or any Stellar asset)
+2. **The authorization is stored in a Soroban contract** — not with XLMPay, not with the recipient. The payer's funds never leave their wallet until a pull actually executes.
+3. **The recipient calls `pull()` each billing cycle.** The contract checks the authorization's limits before releasing any funds. If the recipient tries to pull more than allowed, more often than allowed, or after expiry/revocation, the contract simply rejects it.
+4. **The payer can revoke at any time**, unilaterally, on-chain. No cooperation from the recipient is required, and no further pulls succeed after revocation.
+5. **Funds stay in the payer's wallet the entire time** — this is not a custodial pool, an escrow deposit, or a pre-funded balance. The contract holds a *permission*, not money.
 
-Architecture with diagrams
-Security safeguards explained
-Complete governance process flow
-Smart contract implementation details
-Testing & validation strategy
-GOVERNANCE_GUIDE.md: Practical guide with:
+In short: **autopay for self-custodial wallets, where the limits are enforced by code instead of trust.**
 
-Step-by-step CLI examples
-Multi-signature approval workflow
-Timelock management
-Error handling & troubleshooting
-Emergency procedures
-QUICK_REFERENCE.md: Cheat sheet with:
+---
 
-30-second overview
-Function reference
-Common scenarios
-Error codes
-Deployment
-Testnet Deployment
-Set up your Stellar CLI:
-stellar config network set testnet https://soroban-testnet.stellar.org
-Create a network configuration:
-stellar config set --scope global RPC_URL https://soroban-testnet.stellar.org
-stellar config set --scope global NETWORK_PASSPHRASE "Test SDF Network ; September 2015"
-Deploy contracts:
-# Build WASM binaries
-cargo build --release --target wasm32-unknown-unknown
+# 🧑‍🤝‍🧑 Who This Is For
 
-# Deploy trading contract
-stellar contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/trading_contract.wasm \
-  --source account-name \
-  --network testnet
-Initialize contracts after deployment:
-# Initialize trading contract with governance
-stellar contract invoke \
-  --id CONTRACT_ADDRESS \
-  --source account-name \
-  --network testnet \
-  -- init \
-  --admin "$ADMIN_ADDRESS" \
-  --approvers '["$APPROVER1", "$APPROVER2", "$APPROVER3"]' \
-  --executor "$EXECUTOR_ADDRESS"
-  
-Contract Descriptions
-Trading Contract ✨ (Upgradeable)
-Manages decentralized trading operations with governance support.
+* **On-chain subscription services** — SaaS products, content platforms, or any app that wants "subscribe and forget" instead of manual monthly payments
+* **DAOs** — automated contributor salaries / payroll without a treasury admin manually sending funds every cycle
+* **Rent and installment payments** — landlords, lenders, or BNPL-style products that need predictable recurring transfers
+* **Remittances** — recurring family support payments sent automatically on a schedule
+* **Any recurring B2B or B2C payment** where both sides want automation without a custodian in the middle
 
-Key Functions:
-init(): Initialize with governance roles
-trade(): Execute a trade on specified pair with fee collection
-get_stats(): Retrieve trading statistics
-propose_upgrade(): Propose contract upgrade
-approve_upgrade(): Approve pending upgrade
-execute_upgrade(): Execute approved upgrade
-pause() / unpause(): Emergency pause functionality
-Governance Functions:
+---
 
-propose_upgrade(): Create upgrade proposal (Admin)
-approve_upgrade(): Approve proposal (Approver)
-reject_upgrade(): Reject proposal (Approver)
-execute_upgrade(): Execute approved upgrade (Executor)
-cancel_upgrade(): Cancel proposal (Admin)
-Academy Contract (✨ NEW: Vesting & Rewards)
-Manages educational credentials, achievements, and secure vesting of academy rewards.
+# 🏗 How It Works (Architecture)
 
-Two Core Features:
-Vesting Module (NEW) - Time-based vesting of tokens/badges
-grant_vesting(): Create vesting schedule (admin only)
-claim(): Atomic claim of vested tokens (single-claim semantics)
-revoke(): Revoke grant with timelock protection
-get_vesting(): Query vesting schedule
-get_vested_amount(): Calculate current vested amount
-Credentials - Educational achievements
+```text
+┌──────────────┐                                   ┌──────────────────┐
+│    Payer      │  1. signs ONE authorization        │    Recipient      │
+│  (wallet/DID) │ ───────────────────────────────►   │ (merchant/employer)│
+└──────┬───────┘                                    └─────────┬─────────┘
+       │                                                       │
+       │                                                       │ 3. calls pull()
+       │ funds remain in                                       │    each cycle
+       │ payer's wallet                                        ▼
+       │                                          ┌─────────────────────────────┐
+       │                                          │   Soroban Smart Contracts     │
+       │                                          │  • Authorization Registry     │
+       │                                          │  • Pull Execution Engine      │
+       │                                          │  • Limit Enforcement          │
+       │                                          │    (amount/frequency/expiry)  │
+       │                                          │  • Revocation Registry        │
+       └─────────────── 4. revoke any time ───────►                               │
+                                                  └─────────────────────────────┘
+                                                                 │
+                                                  2. on each valid pull, contract
+                                                     releases funds directly
+                                                     payer → recipient
+                                                                 ▼
+                                                       Funds settle on Stellar
+```
 
-issue_credential(): Award credential to user (admin only)
-get_user_credentials(): Retrieve user's credentials
-verify_credential(): Verify a credential exists
-Vesting Features:
+**The contract never custodies funds.** It custodies a *rule*. On every `pull()` call, the contract checks the rule, and if it passes, the transfer happens directly from payer to recipient in the same operation — there's no intermediate holding account.
 
-✅ Time-based vesting with cliff periods
-✅ Linear vesting after cliff
-✅ Single-claim semantics (prevents double-spend)
-✅ Governance revocation with 1+ hour timelock
-✅ Event emission for off-chain indexing
-✅ 18+ comprehensive tests
-Documentation:
+---
 
-VESTING_DESIGN.md - Complete technical design
-VESTING_QUICK_REFERENCE.md - Quick start
-INTEGRATION_GUIDE.md - Integration examples
-README.md - Academy contract overview
-Social Rewards Contract
-Tracks engagement and distributes rewards.
+# ⚡ Core Features
 
-Key Functions:
+## 🔁 One-Time Authorization, Recurring Payments
 
-init(): Initialize the contract
-record_engagement(): Record user engagement activity
-get_user_rewards(): Get user's reward balance and tier
-get_engagement_history(): Get user's engagement history
-claim_tier_reward(): Claim rewards based on tier
-Messaging Contract
-Enables decentralized P2P messaging.
+Sign once, pay automatically on schedule — no manual re-signing every cycle.
 
-Key Functions:
+## 🛡 Hard On-Chain Limits
 
-init(): Initialize the contract
-send_message(): Send message to recipient
-mark_as_read(): Mark message as read
-get_messages(): Get user's messages (received/sent)
-get_unread_count(): Get count of unread messages
-get_stats(): Retrieve messaging statistics
-Environment Variables
-For deployment, set these environment variables:
+Every authorization is bounded by amount, frequency, and expiry, enforced by the contract — not by trusting the recipient's good behavior.
 
-# Stellar account secret key
-export STELLAR_SECRET_KEY="your-secret-key"
+## 🚫 Instant, Unilateral Revocation
 
-# Network configuration (testnet by default)
-export SOROBAN_NETWORK="testnet"
-export SOROBAN_RPC_URL="https://soroban-testnet.stellar.org"
+The payer can cancel an authorization at any time, without needing the recipient's cooperation or approval.
 
-# Governance configuration
-export ADMIN_ADDRESS="G..."
-export APPROVER_1="G..."
-export APPROVER_2="G..."
-export APPROVER_3="G..."
-export EXECUTOR_ADDRESS="G..."
-Security Considerations
-✅ All contracts implement authentication via require_auth()
-✅ Admin functions protected with role verification
-✅ Contract storage uses instance storage for state management
-✅ NEW: Upgradeable via multi-sig governance (prevents rogue upgrades)
-✅ NEW: Timelock delays provide reaction window (1-24+ hours)
-✅ NEW: Transparent proposal system (all changes auditable)
-Ecosystem Repositories
-🌐 Frontend (Next.js): https://github.com/Dev-shamoo/Stellara_Ai
-⚙ Backend (NestJS): https://github.com/shamoo53/Stellara_Ai_backend
-⭐ Stellar Docs: https://developers.stellar.org/docs/smart-contracts/soroban/
+## 💰 Fully Non-Custodial
 
-Contributing
-🤝 Contributing:
-Fork the repository
-Create a feature branch
-Submit a pull request
-Please ensure all tests pass and documentation is updated with your changes.
+Funds never leave the payer's wallet until a valid pull executes. There is no pooled balance, escrow, or custodian holding funds in between payments.
 
-Last Updated: January 22, 2026
-Version: 2.0 (with Upgradeability & Governance)
-Status: Production Ready Commit your changes git pull latest changes to avoid conflicts Submit a pull request Issues and feature requests are welcome.
+## 📊 Streaming Mode (Roadmap)
 
-When adding new features:
+In addition to discrete periodic pulls, a continuous streaming mode is planned for payroll- and rent-style use cases where funds accrue gradually rather than in lump-sum intervals.
 
-Create a new function in the appropriate contract
-Add corresponding tests
-Update this README with new function documentation
-Ensure all tests pass before submitting
+## 🔄 Multi-Asset Support
+
+Authorizations can be denominated in XLM or any Stellar-issued asset (e.g., USDC), since Soroban contracts can interact with the Stellar asset layer directly.
+
+## 🔌 Simple Integration API
+
+Recipients (merchants, payroll systems) integrate via a backend API and SDK without needing to write Soroban contract calls themselves.
+
+---
+
+# ⚠️ Threat Model & Limitations
+
+Being upfront about what can go wrong matters more for payment infrastructure than for most software.
+
+| Risk | Mitigation | Status |
+|---|---|---|
+| Recipient attempts to pull more than authorized | Contract enforces hard amount/frequency caps at execution time | Core contract responsibility |
+| Recipient pulls before the allowed interval has passed | Contract checks last-pull timestamp before releasing funds | Core contract responsibility |
+| Payer's balance is insufficient at pull time | Pull simply fails; no partial-pull or debt is created | Documented behavior, no retry logic yet |
+| Authorization continues after payer intends to cancel but forgets/delays | Revocation is instant once submitted, but payer must actively revoke — there's no "pause and resume" yet | Roadmap item |
+| Malicious or buggy recipient contract integration | Authorization Registry only grants pull *rights* defined by the payer; it cannot be widened by the recipient | Needs third-party audit before production use |
+| Smart contract bugs in limit enforcement logic | Test suite covers core paths (see Testing) | **Not yet audited** — do not use with real funds before an independent audit |
+| Recipient identity confusion (wrong recipient pulls funds) | Authorizations are tied to a specific recipient address at creation time | Core contract responsibility |
+
+### Disclaimer
+
+XLMPay is payment **infrastructure**, not a managed payment service. Integrators are responsible for their own security review, key management practices, and any regulatory obligations relevant to their use case (e.g., payroll compliance, consumer protection rules for subscription billing). This project has not undergone a third-party security audit — treat it as early-stage software.
+
+---
+
+# 📁 Monorepo Structure
+
+```text
+xlmpay/
+│
+├── frontend/                  # Payer-facing web app: connect wallet, create/manage authorizations
+│
+├── backend/                   # API services for recipients: trigger pulls, track billing cycles, webhooks
+│
+├── contract/                  # Soroban smart contract: authorization, pull execution, revocation
+│
+├── docs/                      # Architecture, integration guides, contract reference
+│
+├── .github/                   # CI/CD workflows
+│
+├── package.json               # Root workspace configuration
+├── turbo.json                  # Turborepo config (optional)
+├── README.md
+└── LICENSE
+```
+
+---
+
+# 🖥 Frontend
+
+The payer-facing interface for creating, viewing, and managing payment authorizations.
+
+### Responsibilities
+
+* connect Stellar wallet
+* create a new authorization (set amount, frequency, expiry, recipient, asset)
+* view active authorizations and their pull history
+* revoke an authorization
+* view upcoming/expected pulls
+
+### Stack
+
+* Next.js
+* React
+* TypeScript
+* Tailwind CSS
+* Stellar SDK
+
+---
+
+# ⚙️ Backend
+
+The service layer used by recipients (merchants, payroll systems, landlords) to integrate pull payments into their own product.
+
+### Responsibilities
+
+* track billing cycles and trigger `pull()` calls at the right time
+* expose a simple REST/GraphQL API so recipients don't need to write Soroban calls directly
+* webhook notifications on successful pulls, failed pulls, and revocations
+* authorization status lookups (active, expired, revoked)
+* basic recipient dashboard data (upcoming pulls, payment history)
+
+### Stack
+
+* Node.js
+* Express / NestJS
+* PostgreSQL
+* Stellar SDK
+
+---
+
+# ⛓ Contract
+
+The trust-minimized core of the system. All enforcement of limits happens here, not in the frontend or backend.
+
+### Responsibilities
+
+* store payment authorizations (payer, recipient, asset, amount cap, frequency, expiry)
+* execute `pull()`: validate limits, then transfer funds payer → recipient
+* handle revocation, marking an authorization as permanently inactive
+* emit events for successful pulls, failed pull attempts, and revocations (for backend/frontend to index)
+
+### Stack
+
+* Rust
+* Soroban SDK
+
+---
+
+# 📦 Installation & Setup
+
+## Prerequisites
+
+* Node.js 18+
+* Rust
+* Soroban CLI
+* npm / yarn / pnpm
+
+## Clone Repository
+
+```bash
+git clone https://github.com/xlmpay/xlmpay.git
+cd xlmpay
+```
+
+## Install Dependencies
+
+```bash
+npm install
+```
+
+## Run Frontend
+
+```bash
+cd frontend
+npm run dev
+```
+
+## Run Backend
+
+```bash
+cd backend
+npm run dev
+```
+
+## Build Smart Contract
+
+```bash
+cd contract
+soroban contract build
+```
+
+---
+
+# 🧪 Testing
+
+## Frontend Tests
+
+```bash
+cd frontend
+npm test
+```
+
+## Backend Tests
+
+```bash
+cd backend
+npm test
+```
+
+## Contract Tests
+
+```bash
+cd contract
+cargo test
+```
+
+> Contract test coverage does not constitute a security audit. See [Threat Model & Limitations](#%EF%B8%8F-threat-model--limitations) before using with real funds.
+
+---
+
+# 🌍 Use Cases
+
+* on-chain SaaS subscriptions
+* DAO contributor payroll
+* recurring remittances
+* rent payments
+* installment / BNPL-style loan repayments
+* recurring DAO membership dues
+
+---
+
+# 🔄 Future Roadmap
+
+* continuous streaming payments (payroll/rent-style accrual, not just discrete pulls)
+* pause/resume for authorizations (instead of only revoke-and-recreate)
+* retry logic for failed pulls due to insufficient balance
+* multi-recipient / split-payment authorizations
+* mobile wallet integration
+* developer SDK for faster recipient-side integration
+* third-party smart contract security audit
+
+---
+
+# 🤝 Contributing
+
+We welcome contributions from:
+
+* frontend developers
+* backend engineers
+* Rust / Soroban developers
+* security researchers
+* technical writers
+
+### Contribution Steps
+
+1. Fork repository
+2. Create feature branch
+3. Commit changes
+4. Open Pull Request
+
+
+
+---
+
+# 📚 Documentation
+
+Planned documentation includes:
+
+* contract reference (function signatures, authorization schema)
+* recipient integration guide
+* frontend wallet-connection guide
+* security model and threat model
+* API reference for backend endpoints
+
+---
+
+# 📜 License
+
+MIT License
